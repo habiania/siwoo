@@ -12,9 +12,22 @@ function createGeminiProvider(apiKey: string) {
   });
 }
 
+// OpenAI 직접 호출 (api.openai.com). process.env.OPENAI_API_KEY (sk-...) 를 사용한다.
+function createOpenAIProvider(apiKey: string) {
+  return createOpenAICompatible({
+    name: "openai",
+    baseURL: "https://api.openai.com/v1",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+}
+
 /** AI 호출에 쓸 수 있는 키가 하나라도 있는지 (graceful 폴백 판단용) */
 export function aiAvailable(): boolean {
-  return !!(process.env.GEMINI_API_KEY || process.env.LOVABLE_API_KEY);
+  return !!(
+    process.env.OPENAI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.LOVABLE_API_KEY
+  );
 }
 
 /**
@@ -29,9 +42,22 @@ export function resolveModel(modelId: string) {
     const gemini = createGeminiProvider(gemKey);
     return gemini(modelId.replace(/^google\//, ""));
   }
+  // openai/* 모델은 OPENAI_API_KEY 가 있으면 OpenAI 로 직접 호출한다.
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (modelId.startsWith("openai/") && openaiKey) {
+    const openai = createOpenAIProvider(openaiKey);
+    return openai(modelId.replace(/^openai\//, ""));
+  }
+  // OPENAI_API_KEY 만 있고 모델이 google/* 인 경우 → OpenAI 로 폴백(키 하나로 전 기능 동작)
+  if (openaiKey) {
+    const openai = createOpenAIProvider(openaiKey);
+    return openai("gpt-4o-mini");
+  }
   const lovableKey = process.env.LOVABLE_API_KEY;
   if (!lovableKey) {
-    throw new Error("AI 키 미설정: GEMINI_API_KEY 또는 LOVABLE_API_KEY 가 필요합니다");
+    throw new Error(
+      "AI 키 미설정: OPENAI_API_KEY 또는 GEMINI_API_KEY 또는 LOVABLE_API_KEY 가 필요합니다",
+    );
   }
   const gateway = createLovableAiGatewayProvider(lovableKey);
   return gateway(modelId);
