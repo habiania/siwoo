@@ -1,0 +1,12 @@
+{
+  // Cloudflare Worker 설정 (소스 설정 파일).
+  // 빌드 시 nitro 가 이 파일의 name 등을 읽어 .output/server/wrangler.json 으로 병합 생성하고,
+  // .wrangler/deploy/config.json 이 `wrangler deploy` 를 그 생성본으로 연결한다.
+  // main/assets/compatibility_flags 는 nitro 가 자동 채우므로 여기서 설정하지 않는다.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "siwoo",
+  "compatibility_date": "2026-06-20",
+  "observability": {
+    "enabled": true
+  }
+}

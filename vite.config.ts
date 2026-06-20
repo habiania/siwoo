@@ -7,6 +7,10 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // Force-enable nitro so `vite build` emits a Cloudflare Worker bundle (.output/)
+  // even outside the Lovable build context (e.g. self-hosted Cloudflare deploy).
+  // In the Lovable context nitro is already enabled, so this is a no-op there.
+  nitro: true,
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
