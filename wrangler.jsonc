@@ -6,6 +6,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "siwoo",
   "compatibility_date": "2026-06-20",
+  // 배포(`wrangler deploy`) 시 대시보드에서 직접 넣은 변수/시크릿(SUPABASE_SERVICE_ROLE_KEY 등)을
+  // 지우지 않고 유지한다. (이게 false면 재배포 때 대시보드 변수가 날아갈 수 있음)
+  "keep_vars": true,
   "observability": {
     "enabled": true
   }
