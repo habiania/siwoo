@@ -1,15 +1,12 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
-// 구글 Gemini 직접 호출 (OpenAI 호환 엔드포인트). 별도 의존성 없이
-// createOpenAICompatible 를 재사용한다. 키는 process.env.GEMINI_API_KEY 에서 읽으며
-// 절대 코드에 하드코딩하지 않는다 (Lovable Cloud 시크릿 또는 .env 에 등록).
+// 구글 Gemini 네이티브 호출. OpenAI 호환 엔드포인트는 구조화 출력(JSON 스키마)을
+// 거부해 400(Bad Request) 이 나므로, 전용 provider 를 써서 스키마를 Gemini 형식으로
+// 올바르게 변환한다. 키는 process.env.GEMINI_API_KEY 에서 읽는다.
 function createGeminiProvider(apiKey: string) {
-  return createOpenAICompatible({
-    name: "google-gemini",
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
+  return createGoogleGenerativeAI({ apiKey });
 }
 
 // OpenAI 직접 호출 (api.openai.com). process.env.OPENAI_API_KEY (sk-...) 를 사용한다.
