@@ -48,11 +48,6 @@ export function resolveModel(modelId: string) {
     const openai = createOpenAIProvider(openaiKey);
     return openai(modelId.replace(/^openai\//, ""));
   }
-  // OPENAI_API_KEY 만 있고 모델이 google/* 인 경우 → OpenAI 로 폴백(키 하나로 전 기능 동작)
-  if (openaiKey) {
-    const openai = createOpenAIProvider(openaiKey);
-    return openai("gpt-4o-mini");
-  }
   const lovableKey = process.env.LOVABLE_API_KEY;
   if (!lovableKey) {
     throw new Error(
