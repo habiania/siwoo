@@ -120,3 +120,56 @@ recommendation: 한 문장으로 등록 추천 사유 또는 주의사항.`,
 
     return output;
   });
+
+// 도매 소싱용: 상세페이지(설명·제조사·원산지·인증)를 보고 "제품 품질/상태"를 평가한다.
+// 위탁판매라 판매량·리뷰는 의미 없으므로 고려하지 않는다.
+export const evaluateProductDetail = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        title: z.string(),
+        category: z.string().optional(),
+        supplyPrice: z.number(),
+        marginRate: z.number(),
+        descText: z.string().optional(),
+        manufacturer: z.string().optional(),
+        country: z.string().optional(),
+        safetyCert: z.string().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const model = resolveModel(MODELS.productEvaluation);
+
+    const { output } = await generateText({
+      model,
+      experimental_output: Output.object({
+        schema: z.object({
+          quality_score: z.number().min(0).max(100),
+          condition: z.string(),
+          trademark_risk: z.enum(["safe", "caution", "danger"]),
+          risk_reason: z.string(),
+          recommendation: z.string(),
+        }),
+      }),
+      prompt: `너는 위탁판매 소싱 전문가다. 아래 도매 상품의 "상세페이지 충실도와 제품 품질/상태"만으로 판매할 가치가 있는지 평가하라. 판매량·리뷰수는 도매라 없으니 절대 고려하지 마라.
+
+상품명: ${data.title}
+카테고리: ${data.category ?? "미상"}
+도매가: ${data.supplyPrice}원
+예상 순이익률: ${Math.round(data.marginRate)}%
+제조사: ${data.manufacturer ?? "미상"}
+원산지: ${data.country ?? "미상"}
+안전인증: ${data.safetyCert ?? "없음/미상"}
+상세설명(발췌): ${(data.descText ?? "없음").slice(0, 1800)}
+
+평가:
+- quality_score(0~100): 상세설명이 충실한가(스펙·구성·사용법), 제품이 정상적이고 팔 만한가, 제조사/원산지/인증 정보가 신뢰되는가, 과장·불법·하자·미흡 소지가 없는가. 정보가 부실하거나 의심스러우면 낮게 준다.
+- condition: 제품 상태/상세 품질을 한 줄로.
+- trademark_risk: 상품명에 유명 브랜드·상표 침해 소지(safe/caution/danger).
+- risk_reason: 그 판단 근거 한 줄.
+- recommendation: 등록 추천 사유 또는 주의점 한 문장.`,
+    });
+
+    return output;
+  });

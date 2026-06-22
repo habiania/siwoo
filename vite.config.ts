@@ -7,10 +7,14 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
-  // Force-enable nitro so `vite build` emits a Cloudflare Worker bundle (.output/)
-  // even outside the Lovable build context (e.g. self-hosted Cloudflare deploy).
-  // In the Lovable context nitro is already enabled, so this is a no-op there.
-  nitro: true,
+  // Force-enable nitro so `vite build` emits a deploy bundle.
+  // - Cloudflare: emits a Worker (.output/) — used by the Cloudflare deploy.
+  // - Vercel: nitro auto-detects the VERCEL env var and builds for Vercel.
+  // maxDuration 60 (Vercel Hobby max): the sourcing pipeline fetches product
+  // detail pages and runs several AI calls per run, so the default 10s is too short.
+  nitro: {
+    vercel: { functions: { maxDuration: 60 } },
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
