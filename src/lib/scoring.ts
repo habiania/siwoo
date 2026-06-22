@@ -3,8 +3,8 @@
 
 export type ScoreInput = {
   marginRate: number; // 순이익률 % (예: 22)
-  salesCount: number; // 월 판매량
-  reviewCount: number; // 누적 리뷰수
+  salesCount?: number; // 월 판매량 (없으면 중립 처리 — 도매 API 는 판매량 미제공)
+  reviewCount?: number; // 누적 리뷰수 (없으면 중립 처리)
   reviewVelocity?: number; // 최근 리뷰 증가속도 0~100 (없으면 중립)
   competitionLevel?: number; // 경쟁강도 0~100 (높을수록 경쟁 심함, 없으면 중립)
   seasonality?: number; // 계절 적합도 0~100 (트렌드 점수 등, 없으면 중립)
@@ -53,8 +53,10 @@ function logScore(value: number, hi: number): number {
 export function scoreProduct(input: ScoreInput): { score: number; breakdown: ScoreBreakdown } {
   const breakdown: ScoreBreakdown = {
     margin: Math.round(linear(input.marginRate, 10, 40)), // 10% 이하 0, 40% 이상 100
-    sales: Math.round(logScore(input.salesCount, 1000)),
-    review: Math.round(logScore(input.reviewCount, 500)),
+    // 판매량·리뷰는 데이터가 없으면(undefined) 0점이 아니라 중립(50)으로 둔다.
+    // 도매 소싱 단계에선 이 데이터가 없으므로 마진·트렌드 등 가용 신호로만 평가.
+    sales: Math.round(input.salesCount == null ? 50 : logScore(input.salesCount, 1000)),
+    review: Math.round(input.reviewCount == null ? 50 : logScore(input.reviewCount, 500)),
     reviewVelocity: Math.round(clamp(input.reviewVelocity ?? 50)),
     competition: Math.round(clamp(100 - (input.competitionLevel ?? 50))), // 경쟁 낮을수록 고득점
     seasonality: Math.round(clamp(input.seasonality ?? 50)),

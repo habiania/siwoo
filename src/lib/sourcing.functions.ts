@@ -11,6 +11,7 @@ type DomeItem = {
   title: string;
   price: number;
   stock: number;
+  shipping: number;
   thumbnail: string | null;
   category: string | null;
 };
@@ -51,12 +52,15 @@ async function domeSearch(keyword: string, apiKey: string, size: number): Promis
     const title = pick(b, "title");
     if (!no || !title) continue;
     const price = Number((pick(b, "price") ?? "0").replace(/[^\d]/g, "")) || 0;
-    const stock = Number((pick(b, "qty") ?? pick(b, "unit") ?? "0").replace(/[^\d]/g, "")) || 0;
+    // 도매꾹 응답: 최소구매수량 <unitQty>, 배송비 <deli><fee>
+    const stock = Number((pick(b, "unitQty") ?? pick(b, "qty") ?? "0").replace(/[^\d]/g, "")) || 0;
+    const shipping = Number((pick(b, "fee") ?? "0").replace(/[^\d]/g, "")) || 0;
     items.push({
       source_id: no,
       title,
       price,
       stock,
+      shipping,
       thumbnail: pick(b, "thumb") ?? pick(b, "image"),
       category: pick(b, "ctgr") ?? pick(b, "category"),
     });
@@ -131,16 +135,15 @@ export const sourceProducts = createServerFn({ method: "POST" })
         }
         seen.add(it.source_id);
 
-        const shipping = 0;
+        const shipping = it.shipping;
         // 1) 가격 결정 엔진: 모든 플랫폼에서 목표 순이익률 충족하는 권장가
         const pricing = calcPricing(it.price, shipping, [] as Platform[], targetNetMargin);
         const top = pricing.perPlatform.reduce((a, b) => (b.salePrice >= a.salePrice ? b : a));
 
-        // 2) 스코어링 엔진 (8요소). 80점 미만은 등록하지 않는다.
+        // 2) 스코어링 엔진 (8요소). 기준 미만은 등록하지 않는다.
+        // 도매 API 는 판매량·리뷰를 주지 않으므로 생략(중립 처리) → 마진·트렌드 등으로 평가.
         const { score, breakdown } = scoreProduct({
           marginRate: top.netMarginRate * 100,
-          salesCount: it.stock, // 도매 재고는 회전 대용 지표
-          reviewCount: 0,
           seasonality: season,
           supplierTrust: SUPPLIER_TRUST,
         });
