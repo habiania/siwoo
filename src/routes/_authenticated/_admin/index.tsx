@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +12,7 @@ import {
   fetchTrends,
   formatKRW,
 } from "@/lib/queries";
+import { runDailyReview } from "@/lib/pipeline.functions";
 import {
   Sparkles,
   CheckCircle2,
@@ -18,6 +21,7 @@ import {
   Package,
   ArrowRight,
   Activity,
+  Loader2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/_admin/")({
@@ -71,6 +75,39 @@ function Dashboard() {
   const { data: activity = [] } = useQuery({ queryKey: ["activity"], queryFn: fetchActivity });
   const { data: trends = [] } = useQuery({ queryKey: ["trends"], queryFn: fetchTrends });
 
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const runFn = useServerFn(runDailyReview);
+  const run = useMutation({
+    mutationFn: () => runFn({ data: {} }),
+    onSuccess: (res: { sourced?: { detail?: string } }) => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["trends"] });
+      let n = 0;
+      try {
+        n = JSON.parse(res?.sourced?.detail ?? "{}").inserted ?? 0;
+      } catch {
+        /* noop */
+      }
+      if (n > 0) {
+        toast.success(`AI가 추천 상품 ${n}개를 준비했어요`, {
+          description: "상품명·프로모션·가격까지 자동 생성됨. 검수에서 확인하세요.",
+        });
+        navigate({ to: "/review" });
+      } else {
+        toast.message("이번엔 새로 등록된 상품이 없어요", {
+          description: "잠시 후 다시 누르거나, 트렌드 키워드를 바꿔보세요.",
+        });
+      }
+    },
+    onError: (e) => {
+      toast.error("검수 자동화 실패", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    },
+  });
+
   const pending = products.filter((p) => p.status === "pending");
   const approved = products.filter((p) => p.status === "approved");
   const lowStock = products.filter((p) => p.stock_qty <= 10 && p.stock_qty > 0);
@@ -86,12 +123,19 @@ function Dashboard() {
             오늘도 AI가 추천한 상품들을 검토하세요. 평균 검수시간 5분 이내.
           </p>
         </div>
-        <Button asChild size="lg" className="rounded-xl">
-          <Link to="/review">
+        <Button
+          onClick={() => run.mutate()}
+          disabled={run.isPending}
+          size="lg"
+          className="rounded-xl"
+        >
+          {run.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
             <Sparkles className="h-4 w-4 mr-2" />
-            오늘의 검수 시작
-            <ArrowRight className="h-4 w-4 ml-2" />
-          </Link>
+          )}
+          {run.isPending ? "AI 분석·소싱·상품명 생성 중…" : "오늘의 검수 시작"}
+          {!run.isPending && <ArrowRight className="h-4 w-4 ml-2" />}
         </Button>
       </div>
 

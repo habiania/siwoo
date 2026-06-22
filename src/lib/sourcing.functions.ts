@@ -2,12 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { evaluateProductDetail } from "./ai.functions";
+import { evaluateProductDetail, generatePlatformContent } from "./ai.functions";
 import { calcPricing, type Platform } from "./pricing";
 
 // 도매 소싱은 판매량·리뷰가 없으므로, AI 가 "상세페이지/제품 상태/품질" 을 평가한 점수로 거른다.
-const QUALITY_THRESHOLD = 60; // AI 품질점수 60↑ 만 추천 등록
-const MAX_EVAL = 6; // Vercel 함수 시간제한(60s) 안에서 끝내기 위한 1회 상세분석 상한
+const QUALITY_THRESHOLD = 40; // AI 품질점수 40↑ 만 추천 등록 (최종 선별은 사람이 검수에서)
+const MAX_EVAL = 3; // Vercel 60s 안에서 상세분석+상품명생성까지 끝내기 위한 1회 처리 상한
+const PLATFORMS: Platform[] = ["toss", "11st", "gmarket", "auction"];
 
 type DomeItem = {
   source_id: string;
@@ -148,7 +149,7 @@ export const sourceProducts = createServerFn({ method: "POST" })
     const seen = new Set((existing ?? []).map((e) => e.source_id));
 
     const SUPPLIER = "domeme";
-    const counts = { found: 0, inserted: 0, evaluated: 0, lowQuality: 0, skipped: 0 };
+    const counts = { found: 0, inserted: 0, named: 0, evaluated: 0, lowQuality: 0, skipped: 0 };
 
     for (const kw of keywords) {
       if (counts.evaluated >= MAX_EVAL) break;
@@ -207,39 +208,68 @@ export const sourceProducts = createServerFn({ method: "POST" })
           continue;
         }
 
-        const { error } = await sb.from("products").insert({
-          source_id: it.source_id,
-          source_name: it.title,
-          category: it.category ?? kw,
-          supply_price: it.price,
-          shipping_fee: it.shipping,
-          suggested_price: pricing.recommendedSalePrice,
-          normal_price: pricing.normalPrice,
-          expected_profit: top.netProfit,
-          margin_rate: Math.round(top.netMarginRate * 10000) / 100,
-          stock_qty: stock,
-          thumbnail_url: it.thumbnail,
-          description: detail?.descText?.slice(0, 1000) ?? null,
-          ai_score: Math.round(ev.quality_score),
-          trademark_risk: ev.trademark_risk as never,
-          risk_reason: ev.risk_reason,
-          ai_evaluation: ev as never,
-          supplier: SUPPLIER,
-          supplier_trust: 65,
-          status: "pending",
-        });
-        if (error) {
+        const { data: ins, error } = await sb
+          .from("products")
+          .insert({
+            source_id: it.source_id,
+            source_name: it.title,
+            category: it.category ?? kw,
+            supply_price: it.price,
+            shipping_fee: it.shipping,
+            suggested_price: pricing.recommendedSalePrice,
+            normal_price: pricing.normalPrice,
+            expected_profit: top.netProfit,
+            margin_rate: Math.round(top.netMarginRate * 10000) / 100,
+            stock_qty: stock,
+            thumbnail_url: it.thumbnail,
+            description: detail?.descText?.slice(0, 1000) ?? null,
+            ai_score: Math.round(ev.quality_score),
+            trademark_risk: ev.trademark_risk as never,
+            risk_reason: ev.risk_reason,
+            ai_evaluation: ev as never,
+            supplier: SUPPLIER,
+            supplier_trust: 65,
+            status: "pending",
+          })
+          .select("id")
+          .single();
+        if (error || !ins) {
           counts.skipped++;
           continue;
         }
         counts.inserted++;
+
+        // 4) 상표(브랜드) 피한 플랫폼별 상품명 + 프로모션 문구 자동 생성 → platform_listings 저장
+        try {
+          const content = await generatePlatformContent({
+            data: {
+              sourceName: it.title,
+              category: it.category ?? kw,
+              description: detail?.descText ?? undefined,
+              platforms: PLATFORMS,
+            },
+          });
+          const rows = content.listings.map((l) => ({
+            product_id: ins.id,
+            platform: l.platform,
+            platform_title: l.title,
+            promo_text: l.promo,
+            tags: l.tags,
+            detail_html: content.detail_html,
+            price: pricing.recommendedSalePrice,
+          }));
+          await sb.from("platform_listings").upsert(rows, { onConflict: "product_id,platform" });
+          counts.named++;
+        } catch {
+          // 상품명 생성 실패는 무시 (상품 자체는 이미 등록됨)
+        }
       }
     }
 
     await sb.from("activity_log").insert({
       action: "products_sourced",
       target_type: "product",
-      message: `[소싱] AI품질 ${QUALITY_THRESHOLD}점↑ 후보 ${counts.inserted}개 등록 (검색 ${counts.found} · 상세분석 ${counts.evaluated} · 저품질탈락 ${counts.lowQuality})`,
+      message: `[소싱] AI품질 ${QUALITY_THRESHOLD}점↑ 후보 ${counts.inserted}개 등록·상품명생성 ${counts.named} (검색 ${counts.found} · 상세분석 ${counts.evaluated} · 저품질탈락 ${counts.lowQuality})`,
       metadata: counts as never,
     });
 

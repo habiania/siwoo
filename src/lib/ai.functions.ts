@@ -52,7 +52,7 @@ export const generatePlatformContent = createServerFn({ method: "POST" })
 ${platformRules}
 
 각 플랫폼별로:
-- title: 플랫폼 최적화된 상품명 (60자 이내)
+- title: 플랫폼 최적화된 상품명 (60자 이내). ⚠️ 유명 브랜드·상표명(예: 애플, 삼성, 다이슨, 나이키 등)은 절대 쓰지 말 것 — 상표권 침해 방지. 일반 명사·기능·용도 중심으로 작성.
 - promo: 프로모션 문구 1줄 (예: "1+1 특가", "무료배송", "여름 시즌 한정")
 - tags: 검색 태그 5~8개
 

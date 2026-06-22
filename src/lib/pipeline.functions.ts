@@ -41,3 +41,23 @@ export const runDailyPipeline = createServerFn({ method: "POST" })
 
     return { ranAt: new Date().toISOString(), ok: steps.every((s) => s.ok), steps };
   });
+
+/**
+ * "오늘의 검수" 버튼용 경량 파이프라인 (사용자 클릭 1회로 끝):
+ *   트렌드(데이터) 분석 → 도매꾹 소싱(상세페이지 AI 품질평가) → 상표 안전 상품명·프로모션 생성
+ *   → 정상가/판매가/마진은 소싱 단계에서 도매 공급가 기준으로 계산됨.
+ * Vercel 60s 안에 끝나도록 소싱은 1회 소수(MAX_EVAL)만 처리한다 — 더 필요하면 다시 누르면 됨.
+ */
+export const runDailyReview = createServerFn({ method: "POST" })
+  .inputValidator((i: unknown) => z.object({}).parse(i ?? {}))
+  .handler(async () => {
+    const steps: StepResult[] = [];
+    steps.push(await step("collectTrends", () => collectTrends({ data: { limit: 8 } })));
+    steps.push(
+      await step("sourceProducts", () =>
+        sourceProducts({ data: { keywordCount: 3, perKeyword: 3 } }),
+      ),
+    );
+    const sourced = steps.find((s) => s.step === "sourceProducts");
+    return { ranAt: new Date().toISOString(), ok: steps.every((s) => s.ok), steps, sourced };
+  });
