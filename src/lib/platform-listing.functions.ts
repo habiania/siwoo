@@ -52,10 +52,13 @@ async function listOn11st(
     // CDATA 종료 시퀀스(]]>)가 값에 포함되면 XML이 깨지거나 주입될 수 있어 이스케이프한다.
     const cdata = (v: string) => v.replace(/]]>/g, "]]]]><![CDATA[>");
     const brand = cdata((product.category ?? "기타").slice(0, 30));
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Product>
   <selMthdCd>01</selMthdCd>
   <dispCtgrNo>1001</dispCtgrNo>
+  <aplBgnDy>${today}</aplBgnDy>
+  <aplEndDy>29991231</aplEndDy>
   <prdNm><![CDATA[${cdata(product.source_name)}]]></prdNm>
   <brand><![CDATA[${brand}]]></brand>
   <apiPrdAttrBrandCd>-1</apiPrdAttrBrandCd>
