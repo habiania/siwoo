@@ -79,4 +79,7 @@ export function totalFromBreakdown(breakdown: ScoreBreakdown): number {
   return Math.round(clamp(total));
 }
 
-export const REGISTER_THRESHOLD = 80; // 80점 이상만 등록 후보
+// 신규 도매 상품은 리뷰·판매이력이 0이라 구조적으로 ~45~55점이 한계다.
+// 너무 높으면(80) 전부 탈락하므로, AI 는 느슨하게 후보를 거르고 최종 선별은
+// 사람이 "검수" 단계에서 한다. (45점 이상 = 검토할 가치가 있는 후보)
+export const REGISTER_THRESHOLD = 45;

@@ -216,7 +216,7 @@ export const sourceProducts = createServerFn({ method: "POST" })
     await sb.from("activity_log").insert({
       action: "products_sourced",
       target_type: "product",
-      message: `[소싱] 80점↑ 후보 ${counts.inserted}개 등록 (검색 ${counts.found} · 저점탈락 ${counts.lowScore} · AI보강 ${counts.evaluated})`,
+      message: `[소싱] ${REGISTER_THRESHOLD}점↑ 후보 ${counts.inserted}개 등록 (검색 ${counts.found} · 저점탈락 ${counts.lowScore} · AI보강 ${counts.evaluated})`,
       metadata: counts as never,
     });
 
