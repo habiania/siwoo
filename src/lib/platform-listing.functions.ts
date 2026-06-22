@@ -20,10 +20,31 @@ type ProductRow = {
   description: string | null;
 };
 
-async function listOn11st(product: ProductRow, dryRun: boolean): Promise<PlatformResult> {
-  const key = process.env.ELEVENST_API_KEY;
+type Keys = { elevenst: string | null };
+
+async function loadKeys(
+  supabase: import("@supabase/supabase-js").SupabaseClient,
+): Promise<Keys> {
+  // 마켓 API 키는 설정 페이지(settings 테이블)에서 읽는다. (env 아님)
+  const { data: s } = await supabase
+    .from("settings")
+    .select("api_11st_key")
+    .eq("id", 1)
+    .maybeSingle();
+  return { elevenst: (s?.api_11st_key as string | null) || null };
+}
+
+async function listOn11st(
+  product: ProductRow,
+  key: string | null,
+  dryRun: boolean,
+): Promise<PlatformResult> {
   if (!key)
-    return { platform: "11st", status: "skipped", error_message: "ELEVENST_API_KEY 미설정 · 대기" };
+    return {
+      platform: "11st",
+      status: "skipped",
+      error_message: "11번가 API 키 미설정 (설정 → 11번가 API 키)",
+    };
   try {
     // 11번가 오픈 API: /rest/prodservices/product. 응답은 EUC-KR XML이며
     // 검증 오류여도 HTTP 200을 반환하므로 본문의 resultCode/message 를 파싱.
@@ -131,9 +152,10 @@ function isDryRun(override?: boolean): boolean {
 async function runPlatform(
   platform: Platform,
   product: ProductRow,
+  keys: Keys,
   dryRun: boolean,
 ): Promise<PlatformResult> {
-  if (platform === "11st") return listOn11st(product, dryRun);
+  if (platform === "11st") return listOn11st(product, keys.elevenst, dryRun);
   if (platform === "toss") return listOnToss(product);
   return skipEsm(platform);
 }
@@ -208,11 +230,12 @@ export const approveProduct = createServerFn({ method: "POST" })
     }
 
     // 2) 플랫폼별 등록 시도 (개별 try/catch는 함수 내부)
+    const keys = await loadKeys(supabase);
     const results = await Promise.all([
-      runPlatform("toss", product as ProductRow, dryRun),
-      runPlatform("11st", product as ProductRow, dryRun),
-      runPlatform("gmarket", product as ProductRow, dryRun),
-      runPlatform("auction", product as ProductRow, dryRun),
+      runPlatform("toss", product as ProductRow, keys, dryRun),
+      runPlatform("11st", product as ProductRow, keys, dryRun),
+      runPlatform("gmarket", product as ProductRow, keys, dryRun),
+      runPlatform("auction", product as ProductRow, keys, dryRun),
     ]);
 
     // 3) platform_listings upsert + activity_log 기록
@@ -262,8 +285,9 @@ export const retryPlatformListing = createServerFn({ method: "POST" })
 
     if (targets.length === 0) return { productId: product.id, results: [] };
 
+    const keys = await loadKeys(supabase);
     const results = await Promise.all(
-      targets.map((p) => runPlatform(p, product as ProductRow, dryRun)),
+      targets.map((p) => runPlatform(p, product as ProductRow, keys, dryRun)),
     );
     for (const r of results) await recordResult(supabase, product as ProductRow, r);
     return { productId: product.id, results };
@@ -300,6 +324,7 @@ export const retryPlatformListingsBulk = createServerFn({ method: "POST" })
       .in("id", productIds);
     if (pErr) throw pErr;
     const byId = new Map((products ?? []).map((p) => [p.id, p as ProductRow]));
+    const keys = await loadKeys(supabase);
 
     const results = await Promise.all(
       data.items.map(async (it) => {
@@ -312,7 +337,7 @@ export const retryPlatformListingsBulk = createServerFn({ method: "POST" })
             error_message: "상품 없음",
           };
         }
-        const r = await runPlatform(it.platform, product, dryRun);
+        const r = await runPlatform(it.platform, product, keys, dryRun);
         await recordResult(supabase, product, r);
         return { productId: it.productId, ...r };
       }),
